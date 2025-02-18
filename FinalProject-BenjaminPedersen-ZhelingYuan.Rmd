@@ -1,0 +1,494 @@
+---
+title: "Final Project Report"
+author: "Ben & Zheling"
+output:
+  html_document:
+    df_print: paged
+    code_download: yes
+  pdf_document: default
+---
+
+<p align="center">
+![](MK64.png){width=90%}</p>
+(Nobles, n.d.)
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Libraries
+library(dplyr)
+library(gt)
+library(gtExtras)
+library(ggplot2)
+library(lubridate)
+library(forcats)
+library(ggthemes)
+library(paletteer)
+
+
+records <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-05-25/records.csv')
+drivers <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-05-25/drivers.csv')
+```
+
+### 1. Introduction
+
+#### a.
+
+>The set of data sets we used are called, "Mario Kart 64 World Records" from tidytuesday on GitHub's website under rfordatascience.  Mario Kart 64 was a popular racing game on Nintendo 64, released back in 1996, 1997 in North America, and is still actively played today.  The data was collected from Mario Kart World Records where people can post their times and videos of their records.  This is not officially affiliated with Nintendo and since there are so many Mario Kart games now, there are different teams dedicated to managing records for the different games.
+
+>There are two data sets in the Mario Kart 64 World Records data set, world-records (which we’ll call records) and drivers.  Records has 10 variables and 2,334 cases.  Each case is a record that was set, and the variables are track name, whether it was a single lap or full race record, whether a shortcut was used, the player’s name, the system it was played on, the date the record was set, the time in two formats and the number of days the record stood. 
+
+>The drivers data set has 6 variables and 2,250 cases.  Each case are the top record holders for that year, top 90 for each year.The variables include the player’s current leader board position, the player’s name, the total world records they hold, the year, the number of world records they obtained that year and player’s nationality.
+
+>Further note about records data set: Mario Kart 64 has 16 tracks, and the records data set includes track records for single laps and the complete races, three laps.  Whether players used shortcuts in their record time is also included, this was yes or no and does not include glitches.  There are a whole host of rules that dictate what is an official submission (Mario Kart 64 Players’ Page, n.d.-a) but essentially you must play the game the way it was intended to be played. Another variable included is what system the lap was set on, National Television System Committee (NTSC) and Phase Alternating Line (PAL).  These systems were used in different countries and run at different frames per second, NTSC being higher than PAL, but the Mario Kart 64 Player's page offers a conversion so lap times should essentially be the same on either system (Mario Kart 64 Players’ Page, n.d.-b).
+
+#### b. Questions of interest.
+
+#### 1)	What do the overall trends of the records?
+#### 2)	What are the current track records?
+#### 3)	How much has the time improved for each track?
+#### 4)	How much time were the longest held records beat by?
+
+### 2. Results
+
+#### This data visualization was created to answer our first question, “What are the overall trends of the records?”
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Record history of every track with and without shortcuts
+without_shortcut <- records %>%
+  filter(shortcut == "No")
+
+with_shortcut <- records %>%
+  filter(shortcut == "Yes")
+
+ggplot() +
+  geom_smooth(data=without_shortcut, aes(x=date, y=time, color=type)) +  # record w/o shortcuts
+  geom_point(data=with_shortcut, aes(x=date, y=time, color=type)) +  # records w/ shortcuts
+  facet_wrap(.~track) +
+  labs(y = "Time (in seconds)",
+       x = "Date",
+       color = "Race Type",
+       title = "MK64 World Record History",
+       caption = "Point represents records with shortcut \nLine represents records without shortcut") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45,  # adjust x axis tick marks
+                                   size = 8.5)) + 
+  scale_color_manual(values = c("blue",  # assign colors
+                                "red"))
+  
+```
+
+There are two noticeable groups of tracks, those with shortcuts and those without.  Records set without shortcuts have a gradual trend while those with shortcuts can have more drastic improvement on time.  Shortcuts have less of an impact on single lap records, but there are some three lap records which are faster than single lap, which is suspicious.
+
+
+#### These tables were created to answer our second question, “What are the current track records?”
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Single lap track records
+
+#(first two line) get rid of shortcut, since we don't care whether they use shortcut or not. After removing "shortcut", there will be duplicate, so use unique to remove duplicate 
+records %>%
+  select(-shortcut) %>% 
+  unique() %>%
+  inner_join(drivers %>%select(player,nation) %>%distinct(player, .keep_all = TRUE), 
+             by="player") %>%   #joint nation from "drivers" dataset with distinct key
+  group_by(track, type) %>%
+  filter(time==min(time), type=="Single Lap") %>% #get best record of single lap
+  select(track, type, player, system_played, date, time, nation) %>%
+  gt(rowname_col = "player", groupname_col = "track") %>%
+  tab_header(title = md("MK64: Single Lap Track Records")) %>%  # title
+  cols_label(player = "Player",  # renaming columns
+             type = "Race Type",
+             system_played = "System Played",
+             date = "Date",
+             time = "Time (sec)",
+             nation = "Nationality"
+             ) %>%
+  cols_align(align = c("center"),  # aligning Film col to the left of cells
+             columns = c(type:time)) %>%
+  gt_color_rows(columns = time,
+                palette = "ggsci::yellow_material",
+                domain = NULL,
+                pal_type = c("discrete")) %>%
+  tab_options(row_group.background.color = "green3",
+              row_group.border.top.color = "yellow",
+              row_group.border.bottom.color = "yellow",
+              row_group.border.left.color = "yellow",
+              row_group.border.right.color = "yellow")  # can customize this later, tab 
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Three Lap Track Records
+
+#(first two line) get rid of shortcut, since we don't care whether they use shortcut or not. After removing "shortcut", there will be duplicate, so use unique to remove duplicate 
+records %>%
+  select(-shortcut) %>%
+  unique() %>%
+  inner_join(drivers %>%select(player,nation) %>%distinct(player, .keep_all = TRUE), 
+             by="player") %>% #joint nation from "drivers" dataset with distinct key
+  group_by(track, type) %>%
+  filter(time==min(time), type=="Three Lap") %>% #get best record of three lap
+  select(track, type, player, system_played, date, time, nation) %>%
+  gt(rowname_col = "player", groupname_col = "track") %>%
+  tab_header(title = md("MK64: Three Lap Track Records")) %>%  # title
+  cols_label(player = "Player",  # renaming columns
+             type = "Race Type",
+             system_played = "System Played",
+             date = "Date",
+             time = "Time (sec)",
+             nation = "Nationality"
+             ) %>%
+  cols_align(align = c("center"),  # aligning Film col to the left of cells
+             columns = c(type:time)) %>%
+  gt_color_rows(columns = time,
+                palette = "ggsci::yellow_material",
+                domain = NULL,
+                pal_type = c("discrete")) %>%
+  tab_options(row_group.background.color = "green3",
+              row_group.border.top.color = "yellow",
+              row_group.border.bottom.color = "yellow",
+              row_group.border.left.color = "yellow",
+              row_group.border.right.color = "yellow")
+```
+
+The current track records are listed in the table.  Americans and Germans hold a lot of the records and there’s more diversity based on nationality in the complete race records.  Most records were made in 2020 and 2021 but there are a few that still hold from 2018 and 2016 and have been tied at best.  Phase Alternating Line (PAL) system appears to be favored in single lap records while there’s a more even ratio of PAL to National Television System Committee (NTSC) in the complete race records.
+
+
+#### These data visualizations were created to answer our third question, “How much has the time improved for each track?”
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Creating new datasets for later use
+
+#slowest record of three lap
+slowest_three_lap <- records %>%
+  filter(type == "Three Lap") %>%
+  group_by(track) %>%
+  summarize(max_time = max(time))
+
+
+#fastest record of three lap
+fastest_three_lap <- records %>%
+  filter(type=="Three Lap") %>%
+  group_by(track) %>%
+  filter(time==min(time)) 
+
+#slowest record of single lap
+slowest_one_lap <- records %>%
+  filter(type == "Single Lap") %>%
+  group_by(track) %>%
+  summarize(max_time = max(time))
+
+
+#fastest record of one lap
+fastest_one_lap <- records %>%
+  filter(type=="Single Lap") %>%
+  group_by(track) %>%
+  filter(time==min(time)) 
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Track record time improvements for three laps
+#no_shortcut and  with_shortcut are created for join dataset later
+#second filter of each modification is used to filter the track that did use or didn't use shortcut, by doing this, we could use color to distinct which track did or didn't use shortcut to get the fastest record
+
+no_shortcut_3 <- records %>%
+  filter(type == "Three Lap") %>%
+  filter(track %in% fastest_three_lap[fastest_three_lap$shortcut=="No",]$track) %>% #filter rows that didn't use shortcut to get the fastest record
+  group_by(type, track) %>%
+  summarize(max_time = max(time),
+            min_time = min(time),
+            gains = max_time - min_time) %>%
+  mutate(track = fct_reorder(track, gains, .desc = FALSE)) 
+
+
+
+with_shortcut_3 <- records %>%
+  filter(type == "Three Lap") %>%
+  filter(!track %in% fastest_three_lap[fastest_three_lap$shortcut=="No",]$track) %>% #filter rows that did use shortcut to get the fastest record
+  group_by(type, track) %>%
+  summarize(max_time = max(time),
+            min_time = min(time),
+            gains = max_time - min_time) %>%
+  mutate(track = fct_reorder(track, gains, .desc = FALSE)) 
+
+#join two datasets for plotting
+all_records_3 <- no_shortcut_3 %>%
+  bind_rows(with_shortcut_3, .id="Shortcut") %>%
+  mutate(Shortcut = fct_recode(Shortcut,  # renaming values in Shortcut col
+                               "No" = "1",
+                               "Yes" = "2"),
+         Shortcut = fct_relevel(Shortcut, "Yes")) %>%  # make Yes to appear 1st
+  ungroup()
+
+ggplot(all_records_3) +
+  geom_point(aes(y=track, x=gains, color = Shortcut)) +
+  labs(title = "MK64: Three Lap Record Total Improvement Time",
+       subtitle = "by Track",
+       x = "Time (in seconds)",
+       y = "Track",
+       color = "Shortcut \nUsed") +
+  scale_color_manual(values = c("dodgerblue3",  # assign colors
+                                "green3")) +
+  theme_minimal()
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Track record time improvements for one lap
+#no_shortcut and  with_shortcut are created for join dataset later
+#second filter of each modification is used to filter the track that did use or didn't use shortcut, by doing this, we could use color to distinct which track did or didn't use shortcut to get the fastest record
+
+no_shortcut_1 <- records %>%
+  filter(type == "Single Lap") %>%
+  filter(track %in% fastest_one_lap[fastest_one_lap$shortcut=="No",]$track) %>% #filter rows that didn't use shortcut to get the fastest record
+  group_by(type, track) %>%
+  summarize(max_time = max(time),
+            min_time = min(time),
+            gains = max_time - min_time) %>%
+  mutate(track = fct_reorder(track, gains, .desc = FALSE)) 
+
+
+
+with_shortcut_1 <- records %>%
+  filter(type == "Single Lap") %>%
+  filter(!track %in% fastest_one_lap[fastest_one_lap$shortcut=="No",]$track) %>% #filter rows that did use shortcut to get the fastest record
+  group_by(type, track) %>%
+  summarize(max_time = max(time),
+            min_time = min(time),
+            gains = max_time - min_time) %>%
+  mutate(track = fct_reorder(track, gains, .desc = FALSE)) 
+
+#join two datasets for plotting
+all_records_1 <- no_shortcut_1 %>%
+  bind_rows(with_shortcut_1, .id="Shortcut") %>%
+  mutate(Shortcut = fct_recode(Shortcut,  # renaming values in Shortcut col
+                               "No" = "1",
+                               "Yes" = "2"),
+         Shortcut = fct_relevel(Shortcut, "Yes")) %>%  # make Yes to appear 1st
+  ungroup()
+
+ggplot(all_records_1) +
+  geom_point(aes(y = track, x = gains, color = Shortcut)) +
+  labs(title = "MK64: Single Lap Record Total Improvement Time",
+       subtitle = "by Track",
+       x = "Time (in seconds)",
+       y = "",
+       color = "Shortcut \nUsed",
+       caption = "Minimum time for all records do not include shortcuts") +
+  # scale_fill_discrete(name = "Shortcut", labels = c("Yes", "No")) +
+  scale_color_manual(values = c("green3",  # assign colors
+                                "dodgerblue3")) +
+  theme_minimal() +
+  theme(legend.position="none")
+```
+
+The difference in records by track are listed in seconds.  The total time track records have been improved is similar between single lap and three lap records.  In three lap records, shortcuts were used in all the tracks with the greatest time improvements while none were needed to improve the time in single lap records.  While the four tracks with the greatest improvements in time for three lap records are Rainbow Road, D.K.’s Jungle Parkway, Wario Stadium and Toads Turnpike, and included shortcuts and had suspicious data from the first visualization, they also have some of the greatest improvements in single lap records without shortcuts. Other tracks were also consistent, a few that appeared to have the most difference in rankings, Yoshi Valley and Toad’s turnpike, are more similar if you exempt the before mentioned four tracks with suspicious data.
+
+#### These data visualization was created to answer our fourth question, “How much time were the longest held records beat by?”
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Time difference on the record that broke the longest held track record
+# w/o shortcuts
+
+#creating ID columns for joint later
+records_new <-records %>%
+  mutate(id=c(1:nrow(records)))
+
+
+#without shortcut
+records_new_no_shortcut <- records_new %>%
+  filter(shortcut=="No") %>%
+  group_by(track, type) %>%
+  filter(record_duration == max(record_duration)) 
+
+#with shortcut
+records_new_with_shortcut <- records_new %>%
+  filter(shortcut=="Yes") %>%
+  group_by(track, type) %>%
+  filter(record_duration == max(record_duration)) 
+
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#improvement after the longest record duration of single lap without shortcut
+
+#after looking through the dataset, we find out there are two longest record duration for Royal Raceway track. Therefore, we manually rename the track name to have a better sense visualization.
+
+updated_records_new_no_shortcut <- records_new_no_shortcut %>%
+  bind_rows(records_new[records_new$id %in% (records_new_no_shortcut$id+1),]) %>% #join the rows after the longest record by id+1
+  arrange(id) %>%
+  filter(type=="Single Lap")  
+
+updated_records_new_no_shortcut[c(21,22),1]="Royal Raceway(longest record #1)"
+updated_records_new_no_shortcut[c(23,24),1]="Royal Raceway(longest record #2)"
+
+updated_records_new_no_shortcut %>%
+  group_by(track, type) %>%
+  summarise(diff=abs(diff(time))) %>%
+  ggplot() +
+  geom_col(aes(y=fct_reorder(track,diff,.desc = FALSE),
+               x=diff,
+               fill = fct_reorder(track,diff,.desc = FALSE))) +
+  labs(title = "MK64: How Much Longest Standing Records Were \nBeat by:",
+       subtitle = "Single lap without shortcuts",
+       x = "Time (s)",
+       y = "") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_fill_paletteer_d(`"colorBlindness::Blue2DarkRed18Steps"`)
+
+# # Create data
+# set.seed(123)
+# x <- rnorm(100)
+# 
+# # Cut data into bins
+# bins <- cut(x, breaks = 5)
+# 
+# # Plot data with gradient color
+# ggplot(data.frame(x), aes(x, fill = as.numeric(bins))) +
+#   geom_bar() +
+#   scale_fill_gradientn(colors = c("red", "yellow", "green", "blue", "purple")) +
+#   theme_classic()
+#
+# colors_list <- c("#FFFF00", "#FFF700", "#FFEF00", "#FFE700", "#FFDF00", "#FFD700",
+#                  "#FFCF00", "#FFC700", "#FFBF00", "#FFB700", "#FFAF00", "#FFA700",
+#                  "#FF9F00", "#FF9700", "#FF8F00", "#FF6900")
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#improvement after the longest record duration of three laps without shortcut
+records_new_no_shortcut %>%
+  bind_rows(records_new[records_new$id %in% (records_new_no_shortcut$id+1),]) %>% #join the rows after the longest record by id+1
+  arrange(id) %>%
+  group_by(track, type) %>%
+  summarise(diff=abs(diff(time))) %>%
+  filter(type=="Three Lap") %>%
+  ggplot() +
+  geom_col(aes(y=fct_reorder(track,diff,.desc = FALSE),
+               x=diff,
+               fill = fct_reorder(track,diff,.desc = FALSE))) +
+  labs(title = "MK64: How Much Longest Standing Records Were Beat by:",
+       subtitle = "Triple lap without shortcuts",
+       x = "Time (s)",
+       y = "") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_fill_paletteer_d(`"colorBlindness::Blue2DarkRed18Steps"`)
+
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Time difference on the record that broke the longest held track record
+# with shortcuts
+##improvement after the longest record duration of single lap with shortcut
+
+#after looking through the dataset, we find out there are two longest record duration for Royal Raceway track. Therefore, we manually rename the track name to have a better sense visualization
+#in addition, for track Sherbet Land, when we bind the dataset with id, coincidentally, the longest record duration of Sherbet Land with shortcut of three lap is the last record and longest record at the same time. Thus, we will remove it.
+
+# records_new_with_shortcut %>% filter(type=="Single Lap") %>%
+#   bind_rows(records_new[records_new$id %in% (records_new_with_shortcut$id+1),]) %>%
+#   arrange(id)
+  
+  
+
+updated_records_new_with_shortcut <-records_new_with_shortcut %>%
+  bind_rows(records_new[records_new$id %in% (records_new_with_shortcut$id+1),]) %>% #join the rows after the longest record by id+1
+  arrange(id) %>%
+  filter(type=="Single Lap")
+
+updated_records_new_with_shortcut <- updated_records_new_with_shortcut %>%
+  filter(!id==1480)
+
+updated_records_new_with_shortcut[c(17,18),1]="Royal Raceway(longest record #1)"
+updated_records_new_with_shortcut[c(19,20),1]="Royal Raceway(longest record #2)"
+
+updated_records_new_with_shortcut %>%
+  group_by(track, type) %>%
+  summarise(diff=abs(diff(time))) %>%
+  ggplot() +
+  geom_col(aes(y=fct_reorder(factor(track), diff, .desc = FALSE),
+               x=diff,
+               fill = fct_reorder(track,diff,.desc = FALSE))) +
+  labs(title = "MK64: How Much Longest Standing Records Were\nBeat by:",
+       subtitle = "Single lap with shortcuts",
+       x = "Time (s)",
+       y = "") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_fill_paletteer_d(`"colorBlindness::Blue2DarkRed18Steps"`)
+#  scale_fill_manual(values = rainbow(16))
+  
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#improvement after the longest record duration of three lap with shortcut
+
+#There is no Sherbet track, since the longest record duration is the last record we have so far. This also means Sherbet Land track won't included in the visualization
+records_new_with_shortcut %>%
+  bind_rows(records_new[records_new$id %in% (records_new_with_shortcut$id+1),]) %>% #join the rows after the longest record by id+1
+  arrange(id) %>%
+  filter(type=="Three Lap") %>%
+  group_by(track, type) %>%
+  summarise(diff=abs(diff(time))) %>%
+  ggplot() +
+  geom_col(aes(y=fct_reorder(factor(track), diff, .desc = FALSE),
+               x=diff,
+               fill = fct_reorder(track,diff,.desc = FALSE))) +
+  labs(title = "MK64: How Much Longest Standing Records Were Beat by:",
+       subtitle = "Triple lap with shortcuts",
+       x = "Time (s)",
+       y = "") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_fill_paletteer_d(`"colorBlindness::Blue2DarkRed18Steps"`)
+  
+```
+
+The time is included in the graphs, some of the tracks did not have records set with shortcuts so there are tracks missing.  Most of the records were beat by less than 0.10 seconds.  The greatest difference in time was a three-lap record for D.K.’s Jungle Parkway, even when divided by 3 to compare to single lap records.  Except for the outlier of D.K.’s Jungle Parkway for three laps, there appears to be greater variance in the single lap record differences both with and without shortcuts.
+
+### 3. Conclusions and Future Work
+
+#### a.
+
+1)	What are the overall trends of the records?
+
+While records without shortcuts have a more gradual record history, some of the records with shortcuts are suspicious since a three lap record shouldn’t be less than a single lap.
+
+
+2)	What are the current track records?
+
+Most track records were relatively new and single lap records seem to favor the PAL system.  Further investigation is needed to see if this is consistent with the rest of the record data, and if so, what’s the reasoning for it.
+
+
+3)	How much has the time improved for each track?
+
+The rank of total improvement time in track records is fairly consistent between single and three lap races, even in the face of the suspicious looking three lap races that include shortcuts.
+
+
+4)	How much time were the longest held records beat by?
+
+Most of the longest standing records were beat by less than 0.10 seconds, except for D.K. Jungle Parkway which was much higher.
+
+
+#### b. 
+
+One of the questions we would like to answer is, “Why are three lap shortcut records sometimes faster than single lap records (for the same track)”.  After creating our visualizations, this is something we briefly looked into by looking at the records data set and filtering these lap records by three lap race type and sorted them by record time.  While we didn’t see any apparent indicators, we could investigate further by filtering the records data set for three lap race type and the 4 tracks with suspicious data.  From there we’d look to see if we can find any patterns in these cases.  If we see something suspicious, say a player or group of players who created these records, we can then filter both data sets for that player’s cases to see if there are any patterns.  If we don’t see any patterns in the track records with suspiciously low times, then we could investigate the source data looking into the source of the data, Mario Kart World Records, to see if there is any explanation for them.
+
+Another question we would like to answer is, “Are PAL systems are preferred for single lap records and if so, why?”  To investigate this further we would filter the records data set by single laps and look at the system to see if the trend holds.  If it does, then further investigation into the data source, Mario Kart World Records, may be necessary.  If the trend does not hold, I would look to see if there are patterns with single laps played on PAL systems with any other variables by filtering the records data set and for single lap records played on PAL systems and looking for any trends in the data.
+
+While the data sets are somewhat limited in variables, it would be interesting to investigate, “How much time shortcuts save”  While we cannot currently do with shortcuts being a Boolean, if the data did exist, perhaps by some determined or seriously bored person recording this based on the record videos on Mario Kart World Records, it would be interesting to create a box plot for each track depicting the time shortcuts saved.  Including a semi-transparent jittered scatterplot on top of them could help give a better sense of the individual data points.
+
+
+###	4. References:
+
+##### Claus, B. (2021, May 25). Mario Kart 64 World Records. GitHub. https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-05-25/readme.md
+
+##### Mario Kart 64 Players’ Page. (n.d.). Www.mariokart64.com. Retrieved December 6, 2022, from https://www.mariokart64.com/mk64/
+
+##### Mario Kart World Records. (n.d.). Mkwrs.com. Retrieved December 6, 2022, from https://mkwrs.com/
+
+##### MK64 WR History. (n.d.). Mkwrs.com. Retrieved December 6, 2022, from https://mkwrs.com/mk64/
+
+##### Nobles, B. (n.d.). Best Mario Kart 64 Characters, All Ranked (Using Math!). FandomSpot. Retrieved December 8, 2022, from https://www.fandomspot.com/best-mario-kart-64-characters/
+

@@ -1,4 +1,4 @@
-# Exploring and Visualizing Data in R: Mario Kart 64 World Records
+# Mario Kart 64 World Records
 
 The goal of this project was to demonstrate our abilities to wrangle and visualize data in R from concepts covered in PUBH 7461 Exploring and Visualizing Data in R. We were to decide what data set to use, our questions of interest, and what tables and visualizations to create. There needed to be at least one gt table and three ggplot visualizations. A short report was created for this assignment, in addition to a presentation.
 
